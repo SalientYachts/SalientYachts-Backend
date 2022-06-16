@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -11,16 +11,16 @@ import "./SalientYachtsStream.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+contract SalientYachtsSYONE_v06 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
 
-    uint8   private constant mintLimit          = 20;
-    uint256 private constant tenYearDeposit     = 2399999999999765395680;
-    uint8   private constant nftPriceDecimals   = 18;
-    uint256 private constant nftMintPrice       = 100 * (10 ** nftPriceDecimals); //mint price fixed at $100
-    uint16  private constant supplyLimit        = 15000; //assume Yacht price is $1,500,000 -> we will have 15000 tokens at $100 each
-    uint256 private constant TEN_YEARS          = 315569520; //10 years -> 315,569,520 seconds
-    uint256 private constant NFT_FIXED_AVAX_PRICE = 10000000000000000; //0.01 AVAX (for testing purposes)
+    uint8   private constant MINT_LIMT              = 20;
+    uint256 private constant TEN_YEAR_DEPOSIT       = 2399999999999765395680;
+    uint8   private constant NFT_PRICE_DECIMALS     = 18;
+    uint256 private constant NFT_MINT_PRICE_USD     = 100 * (10 ** NFT_PRICE_DECIMALS); //mint price fixed at $100
+    uint256 private constant NFT_MINT_PRICE_ETH     = 400000000000000000; //0.40 BNB
+    uint16  private constant SUPPLY_LIMIT           = 20000; //assume Yacht price is $2,000,000 -> we will have 20000 tokens at $100 each
+    uint256 private constant TEN_YEARS              = 315569520; //10 years -> 315,569,520 seconds
 
     enum NFTType {
         Common,
@@ -45,20 +45,23 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         NFTType nftType;
     }
 
+    bool public saleActive = false;
+    SalientYachtsStream public streamContract;
+    bool public useFixedAvaxPrice = true;
+
     mapping(NFTType => NFTTypeData) private nftTypeToData;
     address private priceFeedAddr;
     AggregatorV3Interface internal priceFeed;
     Counters.Counter private _tokenIdCounter; 
-    bool public saleActive = false;                           
     address private rewardContractAddress;
-    SalientYachtsStream public streamContract;
     mapping(address => mapping(uint256 => uint256)) private nftOwnerToTokenIdToStreamId;
-    uint256 private priceCheckInterval = 10 minutes;
-    bool private useFixedAvaxPrice = true;
+    uint256 private priceCheckInterval = 10 minutes;    
     uint256 private mintedNFTScaledCount;
     mapping(bytes32 => NFTSale[]) private affiliateSales;
 
     event AffiliateSale(bytes32 indexed _affiliateId, uint256 _numberOfTokens, NFTType _nftType);
+
+    error InsufficientPayment(uint256 paymentAmount, uint256 paymentRequired);
     
     constructor(address _rewardContractAddress, address _priceFeedAddr) ERC721("Salient Yachts", "SYONE") {
         rewardContractAddress = _rewardContractAddress;
@@ -67,13 +70,13 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         streamContract = new SalientYachtsStream();
         
         nftTypeToData[NFTType.Common] = NFTTypeData('bafyreihmx5rptcqfl2uwxdk5kategwa3ygssfmusj2fxlkdldbf7ezc5q4/metadata.json', 
-            NFT_FIXED_AVAX_PRICE, tenYearDeposit, 1, NFTPrice(0,0),true);
+            NFT_MINT_PRICE_ETH, TEN_YEAR_DEPOSIT, 1, NFTPrice(0,0),true);
 
         nftTypeToData[NFTType.Rare]   = NFTTypeData('bafyreid46czh77qyamtnlsit4qieaoynu6sjn2klcjfvlwbp3gju2o5mly/metadata.json', 
-            NFT_FIXED_AVAX_PRICE * 10, tenYearDeposit * 10, 10, NFTPrice(0,0),true);
+            NFT_MINT_PRICE_ETH * 10, TEN_YEAR_DEPOSIT * 10, 10, NFTPrice(0,0),true);
 
         nftTypeToData[NFTType.Ultra]  = NFTTypeData('bafyreig6zlp6b5mdpuw4kgyibae4kgoma6nczqmgqdjvpem54xfrqgsllm/metadata.json', 
-            NFT_FIXED_AVAX_PRICE * 100, tenYearDeposit * 100, 100, NFTPrice(0,0), true);
+            NFT_MINT_PRICE_ETH * 100, TEN_YEAR_DEPOSIT * 100, 100, NFTPrice(0,0), true);
     }
 
     function _baseURI() internal pure override returns (string memory) {
@@ -84,8 +87,26 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         saleActive = !saleActive;
     }
 
-    function toggleUseFixedAvaxPrice() public returns (bool) {
+    function toggleUseFixedAvaxPrice() public onlyOwner returns (bool) {
         useFixedAvaxPrice = !useFixedAvaxPrice;
+        if (!useFixedAvaxPrice) {
+            console.log("useFixedAvaxPrice is FALSE");
+            NFTTypeData storage nftTypeData = nftTypeToData[NFTType.Common];
+            if (nftTypeData.nftPrice.price == 0) {
+                console.log("Setting the price for Common");
+                getLatestNFTPrice(NFT_PRICE_DECIMALS, NFTType.Common);
+            }
+            nftTypeData = nftTypeToData[NFTType.Rare];
+            if (nftTypeData.nftPrice.price == 0) {
+                console.log("Setting the price for Rare");
+                getLatestNFTPrice(NFT_PRICE_DECIMALS, NFTType.Rare);
+            }
+            nftTypeData = nftTypeToData[NFTType.Ultra];
+            if (nftTypeData.nftPrice.price == 0) {
+                console.log("Setting the price for Ultra");
+                getLatestNFTPrice(NFT_PRICE_DECIMALS, NFTType.Ultra);
+            }            
+        }
         return useFixedAvaxPrice;
     }
 
@@ -95,12 +116,16 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
 
     function buyYachtNFT(uint256 numberOfTokens, NFTType nftType, string memory affiliateId) public payable {
         require(saleActive, "Sale is not active");
-        require(numberOfTokens <= mintLimit, "No more than 20 yacht NFT's at a time");
-        uint256 currentNFTPrice = uint256(getLatestNFTPrice(nftPriceDecimals, nftType));
-        require(msg.value >= currentNFTPrice * numberOfTokens, "Insufficient payment");
+        require(numberOfTokens <= MINT_LIMT, "No more than 20 yacht NFT's at a time");
+        uint256 currentNFTPrice = uint256(getLatestNFTPrice(NFT_PRICE_DECIMALS, nftType));
+        uint256 amtReq = currentNFTPrice * numberOfTokens;
+        if (amtReq > msg.value) {
+            revert InsufficientPayment(msg.value, amtReq);
+        }
+        // require(msg.value >= currentNFTPrice * numberOfTokens, "Insufficient payment");
         NFTTypeData storage nftTypeData = nftTypeToData[nftType];
         require(nftTypeData.isSet, "Can't obtain NFT type data. Invalid NFT type");
-        require(mintedNFTScaledCount + (nftTypeData.multiplier * numberOfTokens)  <= supplyLimit, "Not enough yacht NFT's left");
+        require(mintedNFTScaledCount + (nftTypeData.multiplier * numberOfTokens)  <= SUPPLY_LIMIT, "Not enough yacht NFT's left");
         
         //mint the NFT(s)
         mintedNFTScaledCount += nftTypeData.multiplier * numberOfTokens;
@@ -181,7 +206,7 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         if (useFixedAvaxPrice) {
             return int256(nftTypeData.mintPrice);
         } else {
-            if (block.timestamp - nftTypeData.nftPrice.lastRetreivedAt <= 10 minutes) {
+            if (block.timestamp - nftTypeData.nftPrice.lastRetreivedAt <= priceCheckInterval) {
                 return nftTypeData.nftPrice.price;
             } else {
                 initNFTPrice(_decimals, nftTypeData);
@@ -193,16 +218,10 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
     function initNFTPrice(uint8 _decimals, NFTTypeData storage _nftTypeData) internal {
         int256 decimals = int256(10 ** uint256(_decimals));
         uint8 baseDecimals = priceFeed.decimals();
-        (
-            uint80 roundID, 
-            int price,
-            uint startedAt,
-            uint timeStamp,
-            uint80 answeredInRound
-        ) = priceFeed.latestRoundData();
+        (, int price,,,) = priceFeed.latestRoundData();
         require(price > 0, "Could not retrieve price of AVAX/USD");
         int256 basePrice = scalePrice(price, baseDecimals, _decimals);
-        int256 newPrice = (int256(_nftTypeData.mintPrice) * decimals) / basePrice;
+        int256 newPrice = (int256(NFT_MINT_PRICE_USD) * decimals * int256(int8(_nftTypeData.multiplier))) / basePrice;
         _nftTypeData.nftPrice.price = newPrice;
         _nftTypeData.nftPrice.lastRetreivedAt = block.timestamp;        
     }
@@ -221,8 +240,8 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
     }
 
     function getRemainingNFTBalance() public view returns (uint256) {
-        if (supplyLimit >= mintedNFTScaledCount) {
-            return supplyLimit - mintedNFTScaledCount;
+        if (SUPPLY_LIMIT >= mintedNFTScaledCount) {
+            return SUPPLY_LIMIT - mintedNFTScaledCount;
         } else {
             return 0;
         }
@@ -232,5 +251,22 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         require(bytes(inAffiliateId).length > 0, "Affiliate Id is blank");
         bytes32 affIdHash = keccak256(abi.encode(inAffiliateId));
         return affiliateSales[affIdHash];
+    }
+
+    function withdrawFunds() public onlyOwner {
+        require(address(this).balance > 0, 'The balance is zero, nothing to withdraw');
+        (bool sent, ) = owner().call{value: address(this).balance}("");
+        require(sent, "Failed to send balance to the contract owner");
+    }
+
+    function getNFTPrice(NFTType nftType) public view returns (uint256) {
+        NFTTypeData storage nftTypeData = nftTypeToData[nftType];
+        console.log("getLatestNFTPrice::nftTypeData.isSet %s", nftTypeData.isSet);
+        require(nftTypeData.isSet, "Can't obtain NFT price. Invalid NFT type");
+        if (useFixedAvaxPrice) {
+            return nftTypeData.mintPrice;
+        } else {
+            return uint256(nftTypeData.nftPrice.price);
+        }
     }
 }

@@ -19,7 +19,7 @@ import { BrowserRouter, Link, Route, Switch } from "react-router-dom";
 import WalletLink from "walletlink";
 import Web3Modal from "web3modal";
 import "./App.css";
-import { Account, Contract, Faucet, GasGauge, Header, Ramp, ThemeSwitch } from "./components";
+import { Account, Contract, Faucet, GasGauge, Header, Ramp, ThemeSwitch, Events } from "./components";
 import { INFURA_ID, NETWORK, NETWORKS, ALCHEMY_KEY, SALIENT_YAGHT_STREAM_ABI } from "./constants";
 import externalContracts from "./contracts/external_contracts";
 // contracts
@@ -48,8 +48,9 @@ const { ethers } = require("ethers");
 */
 
 /// 📡 What chain are your contracts deployed to?
-const targetNetwork = NETWORKS.fujiAvalanche;
 // const targetNetwork = NETWORKS.localhost;
+// const targetNetwork = NETWORKS.fujiAvalanche;
+const targetNetwork = NETWORKS.testBinance;
 
 // 😬 Sorry for all the console logging
 const DEBUG = false;
@@ -439,8 +440,7 @@ function App(props) {
     );
   }
 
-  // const streamAddress = useContractReader(readContracts, "SalientYachtsNFT", "streamContract");
-  const streamAddress = useContractReader(readContracts, "SalientYachtsSYONE_v01", "streamContract");
+  const streamAddress = useContractReader(readContracts, "SalientYachtsSYONE_v07", "streamContract");
   if (DEBUG) console.log("✅ streamAddress:", streamAddress);
 
   const theExternalContract = useExternalContractLoader(injectedProvider, streamAddress, SALIENT_YAGHT_STREAM_ABI);
@@ -511,7 +511,7 @@ function App(props) {
               }}
               to="/"
             >
-              SalientYachtsSYONE_v01
+              SalientYachtsSYONE_v07
             </Link>
           </Menu.Item>
           <Menu.Item key="/rewardstream">
@@ -538,20 +538,22 @@ function App(props) {
 
         <Switch>
           <Route exact path="/">
-            {/*
-                🎛 this scaffolding is full of commonly used components
-                this <Contract/> component will automatically parse your ABI
-                and give you a form to interact with it locally
-            */}
-
             <Contract
-              name="SalientYachtsSYONE_v01"
+              name="SalientYachtsSYONE_v07"
               price={price}
               signer={userSigner}
               provider={localProvider}
               address={address}
               blockExplorer={blockExplorer}
               contractConfig={contractConfig}
+            />
+            <Events
+              contracts={readContracts}
+              contractName="SalientYachtsSYONE_v07"
+              eventName="AffiliateSale"
+              localProvider={localProvider}
+              mainnetProvider={mainnetProvider}
+              startBlock={1}
             />
           </Route>
           <Route path="/rewardstream">{streamDisplay}</Route>

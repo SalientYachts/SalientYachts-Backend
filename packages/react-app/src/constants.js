@@ -1,13 +1,13 @@
 // MY INFURA_ID, SWAP IN YOURS FROM https://infura.io/dashboard/ethereum
-export const INFURA_ID = "xxxxxxxxxxxxxxxxxxxxxxx";
+export const INFURA_ID = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 // MY ETHERSCAN_ID, SWAP IN YOURS FROM https://etherscan.io/myapikey
-export const ETHERSCAN_KEY = "xxxxxxxxxxxxxxxxxxxx";
+export const ETHERSCAN_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 // BLOCKNATIVE ID FOR Notify.js:
-export const BLOCKNATIVE_DAPPID = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+export const BLOCKNATIVE_DAPPID = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
-export const ALCHEMY_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxx";
+export const ALCHEMY_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 export const NETWORKS = {
   localhost: {
@@ -23,6 +23,13 @@ export const NETWORKS = {
     chainId: 1,
     rpcUrl: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`,
     blockExplorer: "https://etherscan.io/",
+  },
+  testBinance: {
+    name: "testBinance",
+    color: "#7003DD",
+    chainId: 97,
+    rpcUrl: process.env.REACT_APP_PROVIDER, 
+    blockExplorer: "https://testnet.bscscan.com/",
   },
   kovan: {
     name: "kovan",
@@ -55,7 +62,7 @@ export const NETWORKS = {
     faucet: "https://goerli-faucet.slock.it/",
     blockExplorer: "https://goerli.etherscan.io/",
     rpcUrl: `https://goerli.infura.io/v3/${INFURA_ID}`,
-  },`
+  },
   xdai: {
     name: "xdai",
     color: "#48a9a6",

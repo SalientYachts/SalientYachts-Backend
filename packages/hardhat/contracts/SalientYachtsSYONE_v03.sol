@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -11,16 +11,16 @@ import "./SalientYachtsStream.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+contract SalientYachtsSYONE_v03 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
 
-    uint8   private constant mintLimit          = 20;
-    uint256 private constant tenYearDeposit     = 2399999999999765395680;
-    uint8   private constant nftPriceDecimals   = 18;
-    uint256 private constant nftMintPrice       = 100 * (10 ** nftPriceDecimals); //mint price fixed at $100
-    uint16  private constant supplyLimit        = 15000; //assume Yacht price is $1,500,000 -> we will have 15000 tokens at $100 each
-    uint256 private constant TEN_YEARS          = 315569520; //10 years -> 315,569,520 seconds
-    uint256 private constant NFT_FIXED_AVAX_PRICE = 10000000000000000; //0.01 AVAX (for testing purposes)
+    uint8   private constant mintLimit              = 20;
+    uint256 private constant tenYearDeposit         = 2399999999999765395680;
+    uint8   private constant nftPriceDecimals       = 18;
+    uint256 private constant nftMintPrice           = 100 * (10 ** nftPriceDecimals); //mint price fixed at $100
+    uint16  private constant supplyLimit            = 15000; //assume Yacht price is $1,500,000 -> we will have 15000 tokens at $100 each
+    uint256 private constant TEN_YEARS              = 315569520; //10 years -> 315,569,520 seconds
+    uint256 private constant NFT_FIXED_AVAX_PRICE   = 10000000000000000; //0.01 AVAX (for testing purposes)
 
     enum NFTType {
         Common,
@@ -45,16 +45,17 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         NFTType nftType;
     }
 
+    bool public saleActive = false;
+    SalientYachtsStream public streamContract;
+    bool public useFixedAvaxPrice = true;
+
     mapping(NFTType => NFTTypeData) private nftTypeToData;
     address private priceFeedAddr;
     AggregatorV3Interface internal priceFeed;
     Counters.Counter private _tokenIdCounter; 
-    bool public saleActive = false;                           
     address private rewardContractAddress;
-    SalientYachtsStream public streamContract;
     mapping(address => mapping(uint256 => uint256)) private nftOwnerToTokenIdToStreamId;
-    uint256 private priceCheckInterval = 10 minutes;
-    bool private useFixedAvaxPrice = true;
+    uint256 private priceCheckInterval = 10 minutes;    
     uint256 private mintedNFTScaledCount;
     mapping(bytes32 => NFTSale[]) private affiliateSales;
 
@@ -84,7 +85,7 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         saleActive = !saleActive;
     }
 
-    function toggleUseFixedAvaxPrice() public returns (bool) {
+    function toggleUseFixedAvaxPrice() public onlyOwner returns (bool) {
         useFixedAvaxPrice = !useFixedAvaxPrice;
         return useFixedAvaxPrice;
     }
@@ -181,7 +182,7 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         if (useFixedAvaxPrice) {
             return int256(nftTypeData.mintPrice);
         } else {
-            if (block.timestamp - nftTypeData.nftPrice.lastRetreivedAt <= 10 minutes) {
+            if (block.timestamp - nftTypeData.nftPrice.lastRetreivedAt <= priceCheckInterval) {
                 return nftTypeData.nftPrice.price;
             } else {
                 initNFTPrice(_decimals, nftTypeData);
@@ -232,5 +233,11 @@ contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, O
         require(bytes(inAffiliateId).length > 0, "Affiliate Id is blank");
         bytes32 affIdHash = keccak256(abi.encode(inAffiliateId));
         return affiliateSales[affIdHash];
+    }
+
+    function withdrawFunds() public onlyOwner {
+        require(address(this).balance > 0, 'The balance is zero, nothing to withdraw');
+        (bool sent, ) = owner().call{value: address(this).balance}("");
+        require(sent, "Failed to send balance to the contract owner");
     }
 }

@@ -11,7 +11,7 @@ import "./SalientYachtsStream.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract SalientYachtsSYONE_v01 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+contract SalientYachtsSYONE_v02 is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
 
     uint8   private constant mintLimit          = 20;
